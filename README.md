@@ -31,7 +31,10 @@ Built for a demographic of **18–80 years** across India, VoteWise breaks langu
 - [Our Solution](#-our-solution)
 - [Google Technologies Used](#-google-technologies-used)
 - [Feature Deep Dive](#-feature-deep-dive)
-  - [🤖 AI Chatbot (Gemini)](#-ai-chatbot-assistant--gemini-25-flash)
+  - [🤖 AI Chatbot (Gemini + Google Search Grounding)](#-ai-chatbot-assistant--gemini-25-flash--google-search-grounding)
+  - [📸 AI Document Scanner (Gemini Vision)](#-ai-document-scanner--gemini-vision-multimodal)
+  - [🗣️ Voice Input & Output](#-voice-input--output)
+  - [📊 AI Voter Readiness Report (Structured Output)](#-ai-voter-readiness-report--gemini-structured-output)
   - [🌍 Multilingual Translation Engine](#-multilingual-translation-engine-23-languages)
   - [🎓 First-Timer Mode](#-first-timer-mode)
   - [📅 Election Lifecycle Timeline](#-election-lifecycle-timeline)
@@ -81,19 +84,22 @@ VoteWise is an **AI-first, accessibility-first** platform that addresses every c
 
 ## 🔧 Google Technologies Used
 
-| Technology | How It's Used |
-|---|---|
-| **Gemini 2.5 Flash** (`@google/genai`) | Powers the AI chatbot for real-time voter Q&A with context-aware, jargon-free responses. Also serves as the primary translation engine for batch UI string translation. |
-| **Firebase Authentication** | Anonymous authentication for tracking user quiz progress without requiring sign-up. |
-| **Firebase Realtime Database** | Stores quiz scores, streaks, and user progress data. |
-| **Google Cloud Translation API** | Primary translation tier for paid API users; the app also gracefully falls back to the free Google Translate endpoint when no key is configured. |
-| **Vite + Tailwind CSS** | Google-recommended modern tooling for fast build times and utility-first styling. |
+| Technology | How It's Used | Gemini Feature |
+|---|---|---|
+| **Gemini 2.5 Flash** (`@google/genai`) | Powers the AI chatbot for real-time voter Q&A with context-aware, jargon-free responses. Also serves as the primary translation engine for batch UI string translation. | `generateContent`, System Instructions |
+| **Gemini Vision (Multimodal)** | Analyzes photos of Voter ID (EPIC) cards, extracts personal details, and verifies voter eligibility from document images. | **Multimodal Input** (Image + Text) |
+| **Gemini Google Search Grounding** | Chatbot automatically grounds answers about current elections, schedules, and candidates using live Google Search data with source citations. | **Grounding with Google Search** |
+| **Gemini Structured Output** | Generates personalized Voter Readiness Reports as strict JSON with scores, strengths, gaps, and action items. | **`responseMimeType: 'application/json'`** |
+| **Web Speech API** | Bidirectional voice I/O: Speech Recognition for voice questions in 12+ Indian languages + Text-to-Speech for audio responses. | Speech Recognition + TTS |
+| **Firebase Authentication** | Anonymous authentication for tracking user quiz progress without requiring sign-up. | — |
+| **Firebase Realtime Database** | Stores quiz scores, streaks, and user progress data. | — |
+| **Google Cloud Translation API** | Primary translation tier for paid API users; the app also gracefully falls back to the free Google Translate endpoint when no key is configured. | — |
 
 ---
 
 ## 🔍 Feature Deep Dive
 
-### 🤖 AI Chatbot Assistant — Gemini 2.5 Flash
+### 🤖 AI Chatbot Assistant — Gemini 2.5 Flash + Google Search Grounding
 
 > **File:** [`src/components/features/Chatbot.jsx`](src/components/features/Chatbot.jsx) · [`src/services/gemini.js`](src/services/gemini.js)
 
@@ -103,12 +109,64 @@ The chatbot is the heart of VoteWise. It uses **Gemini 2.5 Flash** with a carefu
 - Dynamically adjusts language complexity when **First-Timer Mode** is enabled, converting technical terms (EVM, VVPAT, Form 6) into plain analogies.
 - Maintains full **conversation history** for contextual follow-up questions.
 - Responds in the user's language when prompted in Hindi or any other language.
+- **🔍 Google Search Grounding** — When users ask about current events (*"When is the next election?"*, *"Who are the candidates?"*), Gemini automatically queries Google Search and returns **grounded answers with source citations** displayed as clickable links.
 
 **Key UX Details:**
 - 🎯 **Suggested Quick Questions** — Pre-built prompts appear on first load (e.g., *"How to register to vote?"*, *"What is an EVM?"*).
 - 🔊 **Per-message TTS** — Every AI response has a hover-reveal 🔊 button for audio playback.
+- 🎤 **Voice Input** — Microphone button for speech-to-text in 12+ Indian languages using Web Speech Recognition API.
+- 🌐 **Source Citations** — Grounded responses show source URLs with globe icons for transparency.
 - 💬 **Markdown rendering** — Bold text and structured responses are parsed and displayed cleanly.
 - ⏳ **Loading skeleton** — Animated bouncing dots indicate the AI is thinking.
+
+---
+
+### 📸 AI Document Scanner — Gemini Vision (Multimodal)
+
+> **File:** [`src/components/features/VoterIDScanner.jsx`](src/components/features/VoterIDScanner.jsx) · [`src/services/gemini.js`](src/services/gemini.js)
+
+A groundbreaking feature that uses **Gemini's multimodal capabilities** to analyze physical ID documents:
+
+- **Camera Capture** — Take a live photo of your Voter ID using the device camera with an alignment guide overlay.
+- **File Upload** — Upload an existing photo of any ID card (Voter ID, Aadhaar, Driving License).
+- **AI Extraction** — Gemini Vision reads the document and extracts: Name, Father/Husband Name, Age/DOB, EPIC Number, Constituency, State, and Gender.
+- **Validity Check** — Determines if the document is a valid Indian Voter ID (EPIC) card.
+- **Eligibility Assessment** — Provides a brief AI-generated eligibility summary based on the visible information.
+- **Actionable Tips** — Returns personalized suggestions like *"Consider updating your address if you have moved"*.
+
+Uses `responseMimeType: 'application/json'` for **structured output** to ensure reliable data extraction.
+
+---
+
+### 🗣️ Voice Input & Output
+
+> **File:** [`src/components/features/Chatbot.jsx`](src/components/features/Chatbot.jsx) · [`src/hooks/useTextToSpeech.js`](src/hooks/useTextToSpeech.js)
+
+Full **bidirectional voice interface** for users who cannot read or type:
+
+- **🎤 Speech-to-Text Input** — Press the microphone button and speak your question in any supported Indian language. Uses the Web Speech Recognition API with BCP 47 locale mapping (`hi-IN`, `bn-IN`, `ta-IN`, etc.).
+- **🔊 Text-to-Speech Output** — Every AI response has a listen button. Speech rate is set to 0.9x for elderly comprehension.
+- **Visual Indicators** — Pulsing red microphone animation during active listening, "Voice Ready" badge in the chatbot header.
+- **Graceful Degradation** — Voice buttons are hidden on unsupported browsers.
+
+This creates a **fully hands-free voting education experience** — a user can ask a question by voice in Hindi, receive the answer in Hindi text, and listen to it read aloud.
+
+---
+
+### 📊 AI Voter Readiness Report — Gemini Structured Output
+
+> **File:** [`src/components/features/VoterReadinessReport.jsx`](src/components/features/VoterReadinessReport.jsx) · [`src/services/gemini.js`](src/services/gemini.js)
+
+After completing the quiz, users can generate a **personalized AI-powered Voter Readiness Report**:
+
+- **Readiness Score** (0-100%) with color-coded circular badge
+- **Fun Badge** — AI-generated title like *"Democracy Champion 🏅"* or *"Rising Voter 🌱"*
+- **Strengths** — What the user already knows well
+- **Knowledge Gaps** — Areas that need improvement
+- **Action Items** — Prioritized next steps with official URLs (e.g., `voters.eci.gov.in`)
+- **Motivational Message** — Personalized encouragement
+
+Powered by Gemini's **structured JSON output** (`responseMimeType: 'application/json'`) to guarantee consistent, parseable reports every time.
 
 ---
 
@@ -424,7 +482,9 @@ votewise/
 ├── src/
 │   ├── components/
 │   │   ├── features/
-│   │   │   ├── Chatbot.jsx          # Gemini-powered AI assistant
+│   │   │   ├── Chatbot.jsx          # Gemini AI assistant + voice + grounding
+│   │   │   ├── VoterIDScanner.jsx   # 📸 Gemini Vision document scanner [NEW]
+│   │   │   ├── VoterReadinessReport.jsx  # 📊 AI readiness report [NEW]
 │   │   │   ├── Quiz.jsx             # Gamified election knowledge quiz
 │   │   │   ├── Timeline.jsx         # Election lifecycle timeline
 │   │   │   ├── EligibilityChecker.jsx  # Voter eligibility form
@@ -449,7 +509,7 @@ votewise/
 │   │   ├── useTextToSpeech.js  # Web Speech API wrapper
 │   │   └── useTranslation.js   # t() function hook
 │   ├── services/
-│   │   ├── gemini.js           # Gemini 2.5 Flash integration
+│   │   ├── gemini.js           # Gemini 2.5 Flash (multimodal, grounding, structured)
 │   │   ├── firebase.js         # Auth + Realtime Database
 │   │   └── translation.js     # 4-tier translation engine
 │   ├── views/
@@ -487,8 +547,10 @@ This project is open-source and available under the [MIT License](LICENSE).
 
 <div align="center">
 
-**Built with ❤️ for the Google Hackathon**
+**Built with ❤️ for Google PromptWars Hackathon**
 
 *Making democracy accessible, one voter at a time.*
+
+**Gemini Features Used:** Multimodal Vision • Google Search Grounding • Structured JSON Output • System Instructions • Batch Translation
 
 </div>

@@ -3,6 +3,7 @@ import { useDemo } from '../../contexts/DemoContext';
 import { CheckCircle, XCircle, RefreshCw, ChevronRight, Award, Flame, Share2 } from 'lucide-react';
 import { saveQuizScore } from '../../services/firebase';
 import { useTranslation } from '../../hooks/useTranslation';
+import VoterReadinessReport from './VoterReadinessReport';
 
 import { QUIZ_QUESTIONS } from '../../constants/componentData';
 
@@ -155,6 +156,11 @@ export default function Quiz() {
           >
             <RefreshCw className="w-4 h-4 mr-2" /> {t('Retake Quiz')}
           </button>
+        </div>
+
+        {/* AI-Powered Voter Readiness Report */}
+        <div className="w-full max-w-md mt-4">
+          <VoterReadinessReport quizScore={score} quizTotal={QUIZ_QUESTIONS.length} />
         </div>
       </div>
     );

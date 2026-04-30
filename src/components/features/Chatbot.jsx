@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useDemo } from '../../contexts/DemoContext';
 import { useFirstTimer } from '../../contexts/FirstTimerContext';
 import { getGeminiResponse } from '../../services/gemini';
-import { Send, User, Bot, AlertCircle, Volume2, VolumeX } from 'lucide-react';
+import { Send, User, Bot, AlertCircle, Volume2, VolumeX, Mic, MicOff, Globe, ExternalLink } from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useTextToSpeech } from '../../hooks/useTextToSpeech';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 import { SUGGESTED_QUESTIONS, DEMO_CHAT } from '../../constants/componentData';
 
@@ -12,6 +13,7 @@ export default function Chatbot() {
   const { isDemoMode } = useDemo();
   const { isFirstTimer } = useFirstTimer();
   const { t } = useTranslation();
+  const { language } = useLanguage();
   const { speak, stop, isSpeaking, supported } = useTextToSpeech();
   
   const [messages, setMessages] = useState([]);
@@ -19,8 +21,18 @@ export default function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [readingIdx, setReadingIdx] = useState(null);
-  
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  // Language code to BCP 47 mapping for speech recognition
+  const langMap = {
+    'en': 'en-IN', 'hi': 'hi-IN', 'bn': 'bn-IN', 'te': 'te-IN',
+    'mr': 'mr-IN', 'ta': 'ta-IN', 'ur': 'ur-IN', 'gu': 'gu-IN',
+    'kn': 'kn-IN', 'ml': 'ml-IN', 'pa': 'pa-IN', 'or': 'or-IN',
+  };
+
+  const speechSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,10 +40,10 @@ export default function Chatbot() {
 
   useEffect(() => {
     if (isDemoMode) {
-      setMessages(DEMO_CHAT.map(msg => ({ ...msg, content: t(msg.content) })));
+      setMessages(DEMO_CHAT.map(msg => ({ ...msg, content: t(msg.content), sources: [] })));
     } else {
       setMessages([
-        { role: 'assistant', content: t("Hello! I'm VoteWise, your AI election assistant. How can I help you understand the voting process today?") }
+        { role: 'assistant', content: t("Hello! I'm VoteWise, your AI election assistant. How can I help you understand the voting process today?"), sources: [] }
       ]);
     }
   }, [isDemoMode, t]);
@@ -46,23 +58,69 @@ export default function Chatbot() {
     }
   }, [isSpeaking]);
 
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = langMap[language] || `${language}-IN`;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setIsListening(true);
+    
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('');
+      setInput(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.warn('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
   const handleSend = async (messageText) => {
     const text = messageText || input;
     if (!text.trim()) return;
 
     // Add user message
-    const newMessages = [...messages, { role: 'user', content: text }];
+    const newMessages = [...messages, { role: 'user', content: text, sources: [] }];
     setMessages(newMessages);
     setInput('');
     setError('');
     setIsLoading(true);
 
     if (isDemoMode) {
-      // Simulate network delay for demo mode
       setTimeout(() => {
         setMessages([...newMessages, { 
           role: 'assistant', 
-          content: t("Demo Mode is active. To get real AI responses from Gemini, disable Demo Mode and ensure your API key is set in the .env file.") 
+          content: t("Demo Mode is active. To get real AI responses from Gemini, disable Demo Mode and ensure your API key is set in the .env file."),
+          sources: []
         }]);
         setIsLoading(false);
       }, 1500);
@@ -70,9 +128,10 @@ export default function Chatbot() {
     }
 
     try {
-      // Create chat history for API (excluding the current one we just added, well actually passing all)
-      const aiResponse = await getGeminiResponse(messages, text, isFirstTimer);
-      setMessages([...newMessages, { role: 'assistant', content: aiResponse }]);
+      const result = await getGeminiResponse(messages, text, isFirstTimer);
+      const aiText = typeof result === 'string' ? result : result.text;
+      const sources = result.sources || [];
+      setMessages([...newMessages, { role: 'assistant', content: aiText, sources }]);
     } catch (err) {
       console.error(err);
       setError(err.message || t("Couldn't connect to the assistant. Please try again."));
@@ -87,14 +146,12 @@ export default function Chatbot() {
       setReadingIdx(null);
     } else {
       setReadingIdx(idx);
-      // Strip basic markdown syntax before reading
       const cleanText = text.replace(/\*\*/g, '');
       speak(cleanText);
     }
   };
 
   const parseMarkdownLike = (text) => {
-    // Simple basic parsing for bold text and newlines for the chatbot UI
     return text.split('\n').map((line, i) => {
       if (!line) return <br key={i}/>;
       
@@ -118,10 +175,15 @@ export default function Chatbot() {
       {/* Header */}
       <div className="bg-[var(--color-navy)] px-6 py-4 flex items-center shadow-sm z-10">
         <Bot className="w-8 h-8 text-white mr-3 bg-white/20 p-1.5 rounded-full" />
-        <div>
+        <div className="flex-1">
           <h2 className="text-white font-bold text-lg leading-tight">{t('VoteWise Assistant')}</h2>
-          <p className="text-[var(--color-saffron)] text-xs font-medium">{t('Powered by Gemini AI')}</p>
+          <p className="text-[var(--color-saffron)] text-xs font-medium">{t('Powered by Gemini AI')} • {t('Google Search Grounded')}</p>
         </div>
+        {speechSupported && (
+          <div className={`px-2 py-1 rounded-full text-xs font-bold ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white/70'}`}>
+            {isListening ? '🎤 Listening...' : '🎤 Voice Ready'}
+          </div>
+        )}
       </div>
 
       {/* Chat Area */}
@@ -146,6 +208,30 @@ export default function Chatbot() {
                 <div className="text-[15px] leading-relaxed">
                    {msg.role === 'assistant' ? parseMarkdownLike(msg.content) : msg.content}
                 </div>
+                
+                {/* Google Search Sources */}
+                {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center text-xs text-gray-400 font-semibold mb-1.5">
+                      <Globe className="w-3 h-3 mr-1" />
+                      Sources
+                    </div>
+                    <div className="space-y-1">
+                      {msg.sources.map((src, sIdx) => (
+                        <a
+                          key={sIdx}
+                          href={src.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1 shrink-0" />
+                          <span className="truncate">{src.title || src.url}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Text-to-Speech Button (Assistant Only) */}
                 {msg.role === 'assistant' && supported && (
@@ -213,12 +299,28 @@ export default function Chatbot() {
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
           className="flex gap-2"
         >
+          {/* Voice Input Button */}
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={toggleVoiceInput}
+              className={`shrink-0 flex items-center justify-center w-10 sm:w-12 h-10 sm:h-12 rounded-full transition-all ${
+                isListening 
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse ring-4 ring-red-200' 
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+              }`}
+              aria-label={isListening ? "Stop listening" : "Start voice input"}
+            >
+              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+          )}
+          
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
-            placeholder={t("Type your question...")}
+            placeholder={isListening ? t("Listening...") : t("Type your question...")}
             className="flex-1 px-4 py-2 sm:py-3 bg-gray-50 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-[var(--color-navy)] focus:bg-white transition-all disabled:opacity-60"
             aria-label="Chatbot input"
           />

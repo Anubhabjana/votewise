@@ -2,6 +2,7 @@ import Timeline from '../components/features/Timeline';
 import EligibilityChecker from '../components/features/EligibilityChecker';
 import MythBusters from '../components/features/MythBusters';
 import PollingBooth from '../components/features/PollingBooth';
+import VoterIDScanner from '../components/features/VoterIDScanner';
 import Logo from '../components/ui/Logo';
 import { useFirstTimer } from '../contexts/FirstTimerContext';
 import { useTranslation } from '../hooks/useTranslation';
@@ -53,6 +54,11 @@ export default function LearnView() {
           <EligibilityChecker />
           <MythBusters />
         </div>
+      </div>
+
+      {/* AI Document Scanner */}
+      <div className="mt-8">
+        <VoterIDScanner />
       </div>
 
       {/* Full width new section */}
