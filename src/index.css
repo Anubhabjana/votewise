@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #000080;
+  --color-navy-dark: #00004d;
+  --color-navy-light: #333399;
+  --color-saffron: #FF9933;
+  --color-saffron-light: #ffb366;
+  --color-saffron-dark: #cc7a29;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8fafc;
+  color: #0f172a;
+  
+  /* Accessibility Variables */
+  --scale-factor: 1;
+  font-size: calc(16px * var(--scale-factor));
+  transition: font-size 0.2s ease-in-out;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Accessibility Scaling Classes */
+html.text-size-normal {
+  --scale-factor: 1;
+}
+
+html.text-size-large {
+  --scale-factor: 1.15;
+}
+
+html.text-size-xl {
+  --scale-factor: 1.3;
+}
+
+/* Accessibility High Contrast Class */
+html.high-contrast {
+  filter: contrast(125%) saturate(120%);
+}
+
+/* Base tailwind elements scaling */
+p, h1, h2, h3, h4, h5, h6, span, button, a, div {
+  /* Only apply scaling if the class isn't overriding font size directly, or we can use rems which scale automatically based on root font size */
+}
+
+/* Ensure buttons have minimum tap targets for elderly users */
+button, a.inline-flex {
+  min-height: 44px;
+}
